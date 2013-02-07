@@ -41,6 +41,8 @@ except ImportError:
         return func
 
 
+logger = logging.getLogger(__name__)
+
 class NOT_AVAILABLE:
     def __str__(self):
         return 'No such data is available.'
@@ -223,7 +225,7 @@ class Resource(object):
     def _handle_500(self, request, exception):
         import traceback
         import sys
-        the_trace = '\n'.join(traceback.format_exception(*(sys.exc_info())))
+        the_trace = ''.join(traceback.format_exception(*(sys.exc_info())))
         response_class = http.HttpApplicationError
 
         if isinstance(exception, (NotFound, ObjectDoesNotExist)):
@@ -241,8 +243,7 @@ class Resource(object):
         # When DEBUG is False, send an error message to the admins (unless it's
         # a 404, in which case we check the setting).
         if not isinstance(exception, (NotFound, ObjectDoesNotExist)):
-            log = logging.getLogger('django.request.tastypie')
-            log.error('Internal Server Error: %s' % request.path, exc_info=sys.exc_info(), extra={'status_code': 500, 'request':request})
+            logger.error('Internal Server Error: %s' % request.path, exc_info=sys.exc_info(), extra={'status_code': 500, 'request':request})
 
             if django.VERSION < (1, 3, 0) and getattr(settings, 'SEND_BROKEN_LINK_EMAILS', False):
                 from django.core.mail import mail_admins
@@ -254,6 +255,9 @@ class Resource(object):
 
                 message = "%s\n\n%s" % (the_trace, request_repr)
                 mail_admins(subject, message, fail_silently=True)
+
+        logger.exception('')
+        #logger.warning('\n%s', the_trace) # Equivalent to above, at warning level rather than error.
 
         # Prep the data going out.
         data = {
@@ -1135,7 +1139,7 @@ class Resource(object):
             else:
                 updated_bundle = self.full_dehydrate(updated_bundle)
                 updated_bundle = self.alter_detail_data_to_serialize(request, updated_bundle)
-                return self.create_response(request, updated_bundle, response_class=http.HttpAccepted)
+                return self.create_response(request, updated_bundle, response_class=http.HttpResponse)
         except (NotFound, MultipleObjectsReturned):
             updated_bundle = self.obj_create(bundle, request=request, **self.remove_api_resource_names(kwargs))
             location = self.get_resource_uri(updated_bundle)
