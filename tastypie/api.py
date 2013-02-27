@@ -2,7 +2,7 @@ import warnings
 from django.conf.urls.defaults import *
 from django.core.exceptions import ImproperlyConfigured
 from django.core.urlresolvers import reverse
-from django.http import HttpResponse
+from django.http import HttpResponse, HttpResponseBadRequest
 from tastypie.exceptions import NotRegistered, BadRequest
 from tastypie.serializers import Serializer
 from tastypie.utils import trailing_slash, is_valid_jsonp_callback_value
@@ -72,12 +72,21 @@ class Api(object):
 
     def wrap_view(self, view):
         def wrapper(request, *args, **kwargs):
-            return getattr(self, view)(request, *args, **kwargs)
+            try:
+                return getattr(self, view)(request, *args, **kwargs)
+            except BadRequest:
+                return HttpResponseBadRequest()
         return wrapper
 
     def override_urls(self):
         """
-        A hook for adding your own URLs or overriding the default URLs.
+        Deprecated. Will be removed by v1.0.0. Please use ``prepend_urls`` instead.
+        """
+        return []
+
+    def prepend_urls(self):
+        """
+        A hook for adding your own URLs or matching before the default URLs.
         """
         return []
 
@@ -95,7 +104,14 @@ class Api(object):
             self._registry[name].api_name = self.api_name
             pattern_list.append((r"^(?P<api_name>%s)/" % self.api_name, include(self._registry[name].urls)))
 
-        urlpatterns = self.override_urls() + patterns('',
+        urlpatterns = self.prepend_urls()
+
+        overridden_urls = self.override_urls()
+        if overridden_urls:
+            warnings.warn("'override_urls' is a deprecated method & will be removed by v1.0.0. Please rename your method to ``prepend_urls``.")
+            urlpatterns += overridden_urls
+
+        urlpatterns += patterns('',
             *pattern_list
         )
         return urlpatterns
@@ -124,6 +140,7 @@ class Api(object):
             }
 
         desired_format = determine_format(request, serializer)
+
         options = {}
 
         if 'text/javascript' in desired_format:
